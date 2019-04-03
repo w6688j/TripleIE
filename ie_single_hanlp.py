@@ -25,37 +25,48 @@ class TripleIEHaNLP(object):
         self.logger.info("start to extract...")
         # 匹配规则
         sentence, rule_str, rule_type = Main(self.sentence).select_rules()
-        self.extract(sentence, rule_str, rule_type)
+        subject = self.extract(sentence, rule_str, rule_type)
 
         if rule_type == 'company' or rule_type == 'movie':
-            self.extract(rule_str, '', '')
+            if subject is not None:
+                self.extract_ATT(rule_str, subject)
 
         elif rule_type == 'car':
             rule_str = '车辆' + rule_str
-            self.extract(rule_str, '', '')
+            if subject is not None:
+                self.extract_ATT(rule_str, subject)
 
-        elif rule_type == 'company_m5' or rule_type == 'movie_m5' or rule_type == 'population_m5':
+        elif rule_type == 'company_m5' or rule_type == 'movie_m6' or rule_type == 'population_m5':
             if rule_type == 'company_m5':
                 rule_str = '公司' + rule_str
             elif rule_type == 'movie_m5':
                 rule_str = '电影' + rule_str
             elif rule_type == 'population_m5':
-                rule_str = '人口' + rule_str
-
-            self.extract(rule_str, '', '')
+                # rule_str = '人口' + rule_str
+                # rule_str = rule_str + '有' + sentence.split('有')[1]
+                rule_str = rule_str
+            if subject is not None:
+                self.extract_ATT(rule_str, subject)
 
         self.logger.info("done with extracting...")
 
-        return self.triples
+        return list(set(self.triples))
 
-    def extract(self, sentence, rule_str, rule_type):
+    def extract(self, sentence, rule_str, rule_type, subject=None):
         HaUtil = HaNLPUtil(sentence)
         words = HaUtil.get_words()
         postags = HaUtil.get_postags()
         arcs = HaUtil.get_dependency_parser()
         sub_dicts = self._build_sub_dicts(words, arcs)
-
         arcs = arcs.getWordArray()
+
+        if subject == None:
+            for idx in range(len(postags)):
+                if str(postags[idx]) in self.v:
+                    sub_dict = sub_dicts[idx]
+                    if 'VOB' in sub_dict:
+                        subject = sub_dict['VOB'][0]
+
         for idx in range(len(postags)):
             if str(postags[idx]) in self.v:
                 sub_dict = sub_dicts[idx]
@@ -63,48 +74,96 @@ class TripleIEHaNLP(object):
                 if 'SBV' in sub_dict and 'VOB' in sub_dict:
                     e1 = self._fill_ent(words, postags, sub_dicts, sub_dict['SBV'][0])
                     r = words[idx]
-                    e2 = self._fill_ent(words, postags, sub_dicts, sub_dict['VOB'][0])
+                    e2 = self._fill_ent(words, postags, sub_dicts, subject)
                     if self.clean_output:
                         self.triples.append("%s, %s, %s\n" % (e1, r, e2))
                     else:
                         self.triples.append("主谓宾 (%s, %s, %s)\n" % (e1, r, e2))
                 # 定语后置，动宾关系
                 if arcs[idx].DEPREL == 'ATT':
-                    if 'VOB' in sub_dict:
-                        e1 = self._fill_ent(words, postags, sub_dicts, arcs[idx].HEAD.ID - 1)
-                        r = words[idx]
-                        e2 = self._fill_ent(words, postags, sub_dicts, sub_dict['VOB'][0])
-                        temp_string = r + e2
-                        if temp_string == e1[:len(temp_string)]:
-                            e1 = e1[len(temp_string):]
-                        if temp_string not in e1:
-                            if self.clean_output:
-                                self.triples.append("%s, %s, %s\n" % (e1, r, e2))
-                            else:
-                                self.triples.append("主谓宾 (%s, %s, %s)\n" % (e1, r, e2))
-                # 时间关系
-                nt_index = self._has_t(postags)
-                if nt_index > -1 and 'VOB' in sub_dict:
-                    e1 = words[nt_index]
+                    # if 'VOB' in sub_dict:
+                    e1 = self._fill_ent(words, postags, sub_dicts, arcs[idx].HEAD.ID - 1)
                     r = words[idx]
-                    e2 = words[sub_dict['VOB'][0]]
-                    if self.clean_output:
-                        self.triples.append("%s, %s, %s\n" % (e1, r, e2))
-                    else:
-                        self.triples.append("时间关系 (%s, %s, %s)\n" % (e1, r, e2))
+                    e2 = self._fill_ent(words, postags, sub_dicts, subject)
+                    temp_string = r + e2
+                    if temp_string == e1[:len(temp_string)]:
+                        e1 = e1[len(temp_string):]
+                    if temp_string not in e1:
+                        if self.clean_output:
+                            self.triples.append("%s, %s, %s\n" % (e1, r, e2))
+                        else:
+                            self.triples.append("主谓宾 (%s, %s, %s)\n" % (e1, r, e2))
 
                 if rule_str and rule_type != 'company' and rule_type != 'car' and rule_type != 'movie':
                     e1 = rule_str
                     r = words[idx]
-                    e2 = words[sub_dict['VOB'][0]] if 'VOB' in sub_dict else ''
+                    e2 = words[subject] if 'VOB' in sub_dict else ''
                     if self.clean_output:
                         self.triples.append("%s, %s, %s\n" % (e1, r, e2))
                     else:
                         self.triples.append("附加关系 (%s, %s, %s)\n" % (e1, r, e2))
 
+        if subject is None:
+            return None
+
+        return words[subject]
+
+    def extract_ATT(self, sentence, subject):
+        HaUtil = HaNLPUtil(sentence)
+        words = HaUtil.get_words()
+        postags = HaUtil.get_postags()
+        arcs = HaUtil.get_dependency_parser()
+        sub_dicts = self._build_sub_dicts(words, arcs)
+        arcs = arcs.getWordArray()
+
+        for idx in range(len(postags)):
+            # 时间关系
+            nt_index = self._has_t(postags)
+            # if nt_index > -1 and 'VOB' in sub_dict:
+            if nt_index > -1:
+                e1 = words[nt_index]
+                r = '_'
+                e2 = subject
+                if self.clean_output:
+                    self.triples.append("%s, %s, %s\n" % (e1, r, e2))
+                else:
+                    self.triples.append("时间关系 (%s, %s, %s)\n" % (e1, r, e2))
+
+            # 地点关系
+            ns_index = self._has_pace(postags)
+            # if nt_index > -1 and 'VOB' in sub_dict:
+            if ns_index > -1:
+                e1 = words[ns_index]
+                r = '_'
+                e2 = subject
+                if self.clean_output:
+                    self.triples.append("%s, %s, %s\n" % (e1, r, e2))
+                else:
+                    self.triples.append("地点关系 (%s, %s, %s)\n" % (e1, r, e2))
+
+            if arcs[idx].DEPREL == 'ATT':
+                e1 = self._fill_ent(words, postags, sub_dicts, arcs[idx].HEAD.ID - 1)
+                r = '_'
+                e2 = subject
+                temp_string = r + e2
+                if temp_string == e1[:len(temp_string)]:
+                    e1 = e1[len(temp_string):]
+                if temp_string not in e1:
+                    if self.clean_output:
+                        self.triples.append("%s, %s, %s\n" % (e1, r, e2))
+                    else:
+                        self.triples.append("主谓宾 (%s, %s, %s)\n" % (e1, r, e2))
+
     def _has_t(self, postags):
         for (index, postag) in enumerate(postags):
-            if postag == 'nt':
+            if str(postag) == 'nt':
+                return index
+
+        return -1
+
+    def _has_pace(self, postags):
+        for (index, postag) in enumerate(postags):
+            if str(postag) == 'ns':
                 return index
 
         return -1
@@ -153,5 +212,5 @@ class TripleIEHaNLP(object):
 
 
 if __name__ == "__main__":
-    IE = TripleIEHaNLP('1986年上海有人口')
-    print(IE.run())
+    IE = TripleIEHaNLP('1984年上海有平均农村人口')
+    print(set(IE.run()))
