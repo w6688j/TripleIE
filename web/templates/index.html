@@ -76,7 +76,6 @@
     $(document).ready(function () {
         var type = '';
         var width = $("body").width();
-        console.log(width);
         if (width < 770) {
             type = 'small';
             $('#small').slideDown()
@@ -128,7 +127,6 @@
                         let targetData = data;
                         targetData = targetData.split('\n');
                         // targetData = targetData.slice(0,10);
-                        console.log(targetData);
                         resolve(targetData);
                     },
                     fail: function (err) {

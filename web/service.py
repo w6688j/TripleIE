@@ -26,6 +26,13 @@ def get_triples():
     return jsonify(code=200, message='ok', data={'triples': triples})
 
 
+@app.route('/get_completion', methods=["POST"])
+def get_completion():
+    post = request.json
+    str = post['s']
+    
+
+
 @app.errorhandler(Exception)
 def flask_global_exception_handler(e):
     return jsonify(code=200, message='err', data={'err': '请求错误'})
