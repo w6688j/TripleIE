@@ -1,6 +1,6 @@
 import requests
 
-with open('data/question.txt', 'r', encoding='utf-8') as f:
+with open('data/new_question.txt', 'r', encoding='utf-8') as f:
     for line in f:
         line_sp = line.strip()
         print(line_sp)
